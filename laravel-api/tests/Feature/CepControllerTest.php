@@ -11,7 +11,6 @@ class CepControllerTest extends TestCase
 {
     public function test_valid_ceps()
     {
-        // Simular a resposta da API do ViaCEP para os CEPs válidos
         Http::fake([
             'viacep.com.br/ws/01001000/json/' => Http::response([
                 'cep' => '01001000',
@@ -43,32 +42,86 @@ class CepControllerTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertJsonStructure([
-            '*' => [
-                'cep',
-                'label',
-                'logradouro',
-                'complemento',
-                'bairro',
-                'localidade',
-                'uf',
-                'ibge',
-                'gia',
-                'ddd',
-                'siafi'
+            'results' => [
+                '*' => [
+                    'cep',
+                    'label',
+                    'logradouro',
+                    'complemento',
+                    'bairro',
+                    'localidade',
+                    'uf',
+                    'ibge',
+                    'gia',
+                    'ddd',
+                    'siafi'
+                ]
             ]
         ]);
     }
 
     public function test_invalid_cep()
     {
-         // Simular a resposta da API do ViaCEP para um CEP inválido
-         Http::fake([
+        Http::fake([
             'viacep.com.br/ws/00000000/json/' => Http::response(['erro' => true], 200)
         ]);
 
         $response = $this->get('/search/local/00000000');
 
         $response->assertStatus(400);
-        $response->assertJson(['error' => 'Invalid CEP']);
+        $response->assertJson([
+            'errors' => [
+                ['cep' => '00000000', 'error' => 'CEP inválido']
+            ]
+        ]);
+    }
+
+    public function test_empty_cep()
+    {
+        $response = $this->get('/search/local');
+
+        $response->assertStatus(400);
+        $response->assertJson(['error' => 'Você precisa incluir um CEP válido']);
+    }
+
+    public function test_cep_with_letters()
+    {
+        $response = $this->get('/search/local/ABC12345');
+
+        $response->assertStatus(400);
+        $response->assertJson([
+            'errors' => [
+                ['cep' => 'ABC12345', 'error' => 'CEP com formato inválido, favor incluir certo']
+            ]
+        ]);
+    }
+
+    public function test_multiple_ceps_with_one_invalid()
+    {
+        Http::fake([
+            'viacep.com.br/ws/01001000/json/' => Http::response([
+                'cep' => '01001000',
+                'logradouro' => 'Praça da Sé',
+                'complemento' => 'lado ímpar',
+                'bairro' => 'Sé',
+                'localidade' => 'São Paulo',
+                'uf' => 'SP',
+                'ibge' => '3550308',
+                'gia' => '1004',
+                'ddd' => '11',
+                'siafi' => '7107'
+            ], 200),
+            'viacep.com.br/ws/00000000/json/' => Http::response(['erro' => true], 200)
+        ]);
+
+        $response = $this->get('/search/local/01001000,00000000');
+
+        $response->assertStatus(400);
+        $response->assertJson([
+            'errors' => [
+                ['cep' => '00000000', 'error' => 'CEP inválido']
+            ]
+        ]);
     }
 }
+?>
